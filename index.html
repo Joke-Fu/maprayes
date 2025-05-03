@@ -1,51 +1,24 @@
-<script type="text/javascript">
-        var gk_isXlsx = false;
-        var gk_xlsxFileLookup = {};
-        var gk_fileData = {};
-        function filledCell(cell) {
-          return cell !== '' && cell != null;
-        }
-        function loadFileData(filename) {
-        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
-            try {
-                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
-                var firstSheetName = workbook.SheetNames[0];
-                var worksheet = workbook.Sheets[firstSheetName];
-
-                // Convert sheet to JSON to filter blank rows
-                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
-                // Filter out blank rows (rows where all cells are empty, null, or undefined)
-                var filteredData = jsonData.filter(row => row.some(filledCell));
-
-                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
-                var headerRowIndex = filteredData.findIndex((row, index) =>
-                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
-                );
-                // Fallback
-                if (headerRowIndex === -1 || headerRowIndex > 25) {
-                  headerRowIndex = 0;
-                }
-
-                // Convert filtered JSON back to CSV
-                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
-                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
-                return csv;
-            } catch (e) {
-                console.error(e);
-                return "";
-            }
-        }
-        return gk_fileData[filename] || "";
-        }
-        </script><!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Maprayés - Traductor, Tabla, Práctica, Config, Ayuda y Aprendizaje</title>
+  <title>Maprayés - Traductor, Tabla, Práctica, Config, Ayuda, Modo Aprendizaje y Vitrina</title>
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
   <style>
+    /* Paleta de colores con caqui claro y nuevo verde oliva */
+    :root {
+      --caqui-claro: #A68A64; /* Fondo principal */
+      --azul-grisaceo: #5C6F7A; /* Fondos secundarios */
+      --verde-oliva: #6B705C; /* Nuevo color para botones y elementos interactivos */
+      --verde-oliva-hover: #5A5F50; /* Nuevo hover para botones */
+      --crema-suave: #F8E9D6; /* Textos y detalles */
+      --gris-oscuro: #4A4A4A; /* Bordes y detalles */
+      --verde-musgo: #6B705C; /* Notificaciones de éxito */
+      --amarillo-mostaza: #D4A017; /* Notificaciones de advertencia */
+      --rojo-apagado: #A8332E; /* Notificaciones de error */
+    }
     .notificacion {
       position: fixed;
       top: 20px;
@@ -53,7 +26,7 @@
       transform: translateX(-50%);
       padding: 10px 20px;
       border-radius: 5px;
-      color: white;
+      color: var(--crema-suave);
       z-index: 1000;
       animation: fadeInOut 3s ease-in-out forwards;
     }
@@ -64,65 +37,152 @@
       100% { opacity: 0; transform: translateY(-10px); }
     }
     .estrella { cursor: pointer; font-size: 1.2rem; }
-    .estrella.favorito { color: #FBBF24; }
+    .estrella.favorito { color: var(--verde-oliva); }
     #qrCanvas { max-width: 200px; margin-top: 10px; }
+    .insignia { padding: 10px; border: 2px solid var(--gris-oscuro); border-radius: 5px; text-align: center; }
+    .insignia.desbloqueada { border-color: var(--verde-oliva); }
+    .insignia:hover .tooltip { visibility: visible; }
+    .tooltip {
+      visibility: hidden;
+      background-color: var(--azul-grisaceo);
+      color: var(--crema-suave);
+      text-align: center;
+      border-radius: 5px;
+      padding: 5px;
+      position: absolute;
+      z-index: 1;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 0.8rem;
+    }
+    .grid-modos { 
+      display: grid; 
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); 
+      gap: 15px; 
+      margin: 15px 0; 
+      width: 100%; 
+    }
+    .grid-dificultades { 
+      display: grid; 
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); 
+      gap: 15px; 
+      margin: 15px 0; 
+      width: 100%; 
+    }
+    .modo-btn { 
+      padding: 15px; 
+      text-align: center; 
+      background-color: var(--verde-oliva); /* Nuevo color para modos */
+      border-radius: 8px; 
+      cursor: pointer; 
+      font-size: 1.1rem; 
+      display: flex; 
+      align-items: center; 
+      justify-content: center; 
+      gap: 8px; 
+      min-height: 80px; 
+    }
+    .dificultad-btn { 
+      padding: 15px; 
+      text-align: center; 
+      background-color: var(--azul-grisaceo); 
+      border-radius: 8px; 
+      cursor: pointer; 
+      font-size: 1.1rem; 
+      display: flex; 
+      align-items: center; 
+      justify-content: center; 
+      gap: 8px; 
+      min-height: 80px; 
+    }
+    .modo-btn:hover, .dificultad-btn:hover { 
+      background-color: var(--verde-oliva-hover); 
+    }
+    .modo-btn.active, .dificultad-btn.active { 
+      background-color: var(--verde-oliva-hover); 
+    }
+    /* Nuevos estilos personalizados */
+    .bg-caqui-claro { background-color: var(--caqui-claro); }
+    .text-crema-suave { color: var(--crema-suave); }
+    .bg-azul-grisaceo { background-color: var(--azul-grisaceo); }
+    .border-gris-oscuro { border-color: var(--gris-oscuro); }
+    .bg-verde-oliva { background-color: var(--verde-oliva); }
+    .hover\:bg-verde-oliva-hover:hover { background-color: var(--verde-oliva-hover); }
+    .bg-verde-musgo { background-color: var(--verde-musgo); }
+    .bg-amarillo-mostaza { background-color: var(--amarillo-mostaza); }
+    .bg-rojo-apagado { background-color: var(--rojo-apagado); }
+    .bg-verde-oliva-hover { background-color: var(--verde-oliva-hover); }
+    .text-verde-musgo { color: var(--verde-musgo); }
+    .text-rojo-apagado { color: var(--rojo-apagado); }
+    /* Fondo con patitas de gato para los modos */
+    #modoLetras, #modoNumeros, #modoSimbolos, #modoEmojis, #modoPalabras, #modoFrases {
+      position: relative;
+      background-color: var(--caqui-claro);
+      background-image: 
+        radial-gradient(circle at 50% 50%, rgba(74, 74, 74, 0.3) 8%, transparent 10%), /* Almohadilla central */
+        radial-gradient(circle at 40% 30%, rgba(74, 74, 74, 0.3) 4%, transparent 6%), /* Dedo superior izquierdo */
+        radial-gradient(circle at 60% 30%, rgba(74, 74, 74, 0.3) 4%, transparent 6%), /* Dedo superior derecho */
+        radial-gradient(circle at 35% 50%, rgba(74, 74, 74, 0.3) 4%, transparent 6%), /* Dedo inferior izquierdo */
+        radial-gradient(circle at 65% 50%, rgba(74, 74, 74, 0.3) 4%, transparent 6%); /* Dedo inferior derecho */
+      background-size: 60px 60px;
+      background-position: 0 0, 10px 5px, 20px 5px, 5px 15px, 25px 15px;
+      background-repeat: repeat;
+    }
   </style>
 </head>
-<body class="bg-gray-900 text-white min-h-screen p-6 flex flex-col" id="theme">
+<body class="bg-caqui-claro text-crema-suave min-h-screen p-6 flex flex-col" id="theme">
   <div class="container mx-auto flex-grow">
     <div id="notificaciones"></div>
     <div id="pantallaPrincipal" class="flex flex-col items-center space-y-4">
       <h1 class="text-4xl font-bold mb-6">Maprayés</h1>
-      <button id="btnTraductor" class="w-3/4 max-w-md px-4 py-3 bg-blue-600 rounded-lg hover:bg-blue-700 text-lg">Traductor</button>
-      <button id="btnTabla" class="w-3/4 max-w-md px-4 py-3 bg-blue-600 rounded-lg hover:bg-blue-700 text-lg">Tabla de Códigos</button>
-      <button id="btnPractica" class="w-3/4 max-w-md px-4 py-3 bg-blue-600 rounded-lg hover:bg-blue-700 text-lg">Práctica Libre</button>
-      <button id="btnAprendizaje" class="w-3/4 max-w-md px-4 py-3 bg-blue-600 rounded-lg hover:bg-blue-700 text-lg">Modo Aprendizaje</button>
-      <button id="btnConfig" class="w-3/4 max-w-md px-4 py-3 bg-blue-600 rounded-lg hover:bg-blue-700 text-lg">Configuración</button>
-      <button id="btnAyuda" class="w-3/4 max-w-md px-4 py-3 bg-blue-600 rounded-lg hover:bg-blue-700 text-lg">Ayuda</button>
+      <button id="btnTraductor" class="w-3/4 max-w-md px-4 py-3 bg-verde-oliva rounded-lg hover:bg-verde-oliva-hover text-lg">Traductor</button>
+      <button id="btnTabla" class="w-3/4 max-w-md px-4 py-3 bg-verde-oliva rounded-lg hover:bg-verde-oliva-hover text-lg">Tabla de Códigos</button>
+      <button id="btnPractica" class="w-3/4 max-w-md px-4 py-3 bg-verde-oliva rounded-lg hover:bg-verde-oliva-hover text-lg">Práctica Libre</button>
+      <button id="btnAprendizaje" class="w-3/4 max-w-md px-4 py-3 bg-verde-oliva rounded-lg hover:bg-verde-oliva-hover text-lg">Modo Aprendizaje</button>
+      <button id="btnVitrina" class="w-3/4 max-w-md px-4 py-3 bg-verde-oliva rounded-lg hover:bg-verde-oliva-hover text-lg">Vitrina de Logros</button>
+      <button id="btnConfig" class="w-3/4 max-w-md px-4 py-3 bg-verde-oliva rounded-lg hover:bg-verde-oliva-hover text-lg">Configuración</button>
+      <button id="btnAyuda" class="w-3/4 max-w-md px-4 py-3 bg-verde-oliva rounded-lg hover:bg-verde-oliva-hover text-lg">Ayuda</button>
     </div>
     <div id="traductor" class="hidden flex flex-col space-y-4">
       <div class="flex items-center justify-between">
         <h2 class="text-2xl font-semibold">Traductor</h2>
-        <button id="regresarDesdeTraductor" class="px-4 py-2 bg-gray-600 rounded hover:bg-gray-700">Regresar</button>
+        <button id="regresarDesdeTraductor" class="px-4 py-2 bg-azul-grisaceo rounded hover:bg-verde-oliva-hover">Regresar</button>
       </div>
       <h3 class="text-xl font-semibold">Texto a Maprayés</h3>
-      <textarea id="inputText" class="w-full p-3 bg-gray-800 border border-gray-600 rounded-lg text-white" placeholder="Escribe tu texto aquí (incluye 😊, ❤️, etc.)"></textarea>
+      <textarea id="inputText" class="w-full p-3 bg-azul-grisaceo border border-gris-oscuro rounded-lg text-crema-suave" placeholder="Escribe tu texto aquí (incluye 😊, ❤️, etc.)"></textarea>
       <div class="flex space-x-2">
-        <button id="copiarInputTextBtn" class="px-4 py-2 bg-gray-600 rounded hover:bg-gray-700">Copiar Texto</button>
-        <button id="intercambiarTextBtn" class="px-4 py-2 bg-gray-600 rounded hover:bg-gray-700">Intercambiar</button>
+        <button id="intercambiarTextBtn" class="px-4 py-2 bg-azul-grisaceo rounded hover:bg-verde-oliva-hover">Intercambiar</button>
       </div>
-      <textarea id="maprayesOutput" class="w-full p-3 bg-gray-800 border border-gray-600 rounded-lg text-white" placeholder="Resultado en Maprayés..."></textarea>
+      <textarea id="maprayesOutput" class="w-full p-3 bg-azul-grisaceo border border-gris-oscuro rounded-lg text-crema-suave" placeholder="Resultado en Maprayés..."></textarea>
       <div class="flex space-x-2">
-        <button id="copiarMaprayesBtn" class="px-4 py-2 bg-gray-600 rounded hover:bg-gray-700">Copiar Maprayés</button>
-        <button id="generarQRBtn" class="px-4 py-2 bg-green-600 rounded hover:bg-green-700">Generar QR</button>
+        <button id="generarQRBtn" class="px-4 py-2 bg-verde-oliva rounded hover:bg-verde-oliva-hover">Generar QR</button>
       </div>
       <div id="qrCanvas" class="hidden"></div>
       <h3 class="text-xl font-semibold mt-4">Maprayés a Texto</h3>
-      <textarea id="inputMaprayes" class="w-full p-3 bg-gray-800 border border-gray-600 rounded-lg text-white" placeholder="Pega tu código Maprayés aquí..."></textarea>
+      <textarea id="inputMaprayes" class="w-full p-3 bg-azul-grisaceo border border-gris-oscuro rounded-lg text-crema-suave" placeholder="Pega tu código Maprayés aquí..."></textarea>
       <div class="flex space-x-2">
-        <button id="copiarInputMaprayesBtn" class="px-4 py-2 bg-gray-600 rounded hover:bg-gray-700">Copiar Maprayés</button>
-        <button id="intercambiarMaprayesBtn" class="px-4 py-2 bg-gray-600 rounded hover:bg-gray-700">Intercambiar</button>
+        <button id="intercambiarMaprayesBtn" class="px-4 py-2 bg-azul-grisaceo rounded hover:bg-verde-oliva-hover">Intercambiar</button>
       </div>
-      <textarea id="textoOutput" class="w-full p-3 bg-gray-800 border border-gray-600 rounded-lg text-white" placeholder="Texto traducido..."></textarea>
-      <button id="copiarTextoOutputBtn" class="px-4 py-2 bg-gray-600 rounded hover:bg-gray-700">Copiar Texto</button>
+      <textarea id="textoOutput" class="w-full p-3 bg-azul-grisaceo border border-gris-oscuro rounded-lg text-crema-suave" placeholder="Texto traducido..."></textarea>
     </div>
     <div id="tablaCodigos" class="hidden flex flex-col space-y-4">
       <div class="flex items-center justify-between">
         <h2 class="text-2xl font-semibold">Tabla de Códigos</h2>
-        <button id="regresarDesdeTabla" class="px-4 py-2 bg-gray-600 rounded hover:bg-gray-700">Regresar</button>
+        <button id="regresarDesdeTabla" class="px-4 py-2 bg-azul-grisaceo rounded hover:bg-verde-oliva-hover">Regresar</button>
       </div>
       <div class="flex space-x-2">
-        <button id="tablaLetrasBtn" class="px-4 py-2 bg-blue-600 rounded hover:bg-blue-700">Letras</button>
-        <button id="tablaNumerosBtn" class="px-4 py-2 bg-blue-600 rounded hover:bg-blue-700">Números</button>
-        <button id="tablaSimbolosBtn" class="px-4 py-2 bg-blue-600 rounded hover:bg-blue-700">Símbolos</button>
-        <button id="tablaEmojisBtn" class="px-4 py-2 bg-blue-600 rounded hover:bg-blue-700">Emojis</button>
-        <button id="tablaFavoritosBtn" class="px-4 py-2 bg-yellow-600 rounded hover:bg-yellow-700">Favoritos</button>
+        <button id="tablaLetrasBtn" class="px-4 py-2 bg-verde-oliva rounded hover:bg-verde-oliva-hover">Letras</button>
+        <button id="tablaNumerosBtn" class="px-4 py-2 bg-verde-oliva rounded hover:bg-verde-oliva-hover">Números</button>
+        <button id="tablaSimbolosBtn" class="px-4 py-2 bg-verde-oliva rounded hover:bg-verde-oliva-hover">Símbolos</button>
+        <button id="tablaEmojisBtn" class="px-4 py-2 bg-verde-oliva rounded hover:bg-verde-oliva-hover">Emojis</button>
+        <button id="tablaFavoritosBtn" class="px-4 py-2 bg-verde-oliva rounded hover:bg-verde-oliva-hover">Favoritos</button>
       </div>
-      <input type="text" id="filtroTabla" class="w-full p-3 bg-gray-800 border border-gray-600 rounded-lg text-white" placeholder="Buscar en la tabla...">
+      <input type="text" id="filtroTabla" class="w-full p-3 bg-azul-grisaceo border border-gris-oscuro rounded-lg text-crema-suave" placeholder="Buscar en la tabla...">
       <div class="overflow-y-auto">
         <table class="w-full text-left border-collapse">
           <thead>
-            <tr class="bg-gray-700">
+            <tr class="bg-azul-grisaceo">
               <th class="p-2">Carácter</th>
               <th class="p-2">Código Maprayés</th>
               <th class="p-2">Favorito</th>
@@ -135,428 +195,136 @@
     <div id="practica" class="hidden flex flex-col space-y-4">
       <div class="flex items-center justify-between">
         <h2 class="text-2xl font-semibold">Práctica Libre</h2>
-        <button id="regresarDesdePractica" class="px-4 py-2 bg-gray-600 rounded hover:bg-gray-700">Regresar</button>
+        <button id="regresarDesdePractica" class="px-4 py-2 bg-azul-grisaceo rounded hover:bg-verde-oliva-hover">Regresar</button>
       </div>
       <p class="text-sm">Escribe un texto y su código Maprayés (o viceversa) y verifica si es correcto.</p>
       <div class="flex space-x-4 mb-4">
-        <button id="practicaTextoBtn" class="px-4 py-2 bg-blue-600 rounded hover:bg-blue-700">Texto a Maprayés</button>
-        <button id="practicaMaprayesBtn" class="px-4 py-2 bg-blue-600 rounded hover:bg-blue-700">Maprayés a Texto</button>
+        <button id="practicaTextoBtn" class="px-4 py-2 bg-verde-oliva rounded hover:bg-verde-oliva-hover">Texto a Maprayés</button>
+        <button id="practicaMaprayesBtn" class="px-4 py-2 bg-verde-oliva rounded hover:bg-verde-oliva-hover">Maprayés a Texto</button>
       </div>
       <div id="practicaTexto" class="space-y-4">
         <h3 class="text-xl font-semibold">Texto a Maprayés</h3>
-        <textarea id="practicaInputTexto" class="w-full p-3 bg-gray-800 border border-gray-600 rounded-lg text-white" placeholder="Escribe el texto..."></textarea>
-        <textarea id="practicaEsperadoTexto" class="w-full p-3 bg-gray-800 border border-gray-600 rounded-lg text-white" placeholder="Escribe el código Maprayés esperado..."></textarea>
-        <button id="verificarPracticaTextoBtn" class="px-4 py-2 bg-blue-600 rounded hover:bg-blue-700">Verificar</button>
+        <textarea id="practicaInputTexto" class="w-full p-3 bg-azul-grisaceo border border-gris-oscuro rounded-lg text-crema-suave" placeholder="Escribe el texto..."></textarea>
+        <textarea id="practicaEsperadoTexto" class="w-full p-3 bg-azul-grisaceo border border-gris-oscuro rounded-lg text-crema-suave" placeholder="Escribe el código Maprayés esperado..."></textarea>
+        <button id="verificarPracticaTextoBtn" class="px-4 py-2 bg-verde-oliva rounded hover:bg-verde-oliva-hover">Verificar</button>
         <p id="feedbackPracticaTexto" class="text-sm"></p>
       </div>
       <div id="practicaMaprayes" class="hidden space-y-4">
         <h3 class="text-xl font-semibold">Maprayés a Texto</h3>
-        <textarea id="practicaInputMaprayes" class="w-full p-3 bg-gray-800 border border-gray-600 rounded-lg text-white" placeholder="Escribe el código Maprayés..."></textarea>
-        <textarea id="practicaEsperadoMaprayes" class="w-full p-3 bg-gray-800 border border-gray-600 rounded-lg text-white" placeholder="Escribe el texto esperado..."></textarea>
-        <button id="verificarPracticaMaprayesBtn" class="px-4 py-2 bg-blue-600 rounded hover:bg-blue-700">Verificar</button>
+        <textarea id="practicaInputMaprayes" class="w-full p-3 bg-azul-grisaceo border border-gris-oscuro rounded-lg text-crema-suave" placeholder="Escribe el código Maprayés..."></textarea>
+        <textarea id="practicaEsperadoMaprayes" class="w-full p-3 bg-azul-grisaceo border border-gris-oscuro rounded-lg text-crema-suave" placeholder="Escribe el texto esperado..."></textarea>
+        <button id="verificarPracticaMaprayesBtn" class="px-4 py-2 bg-verde-oliva rounded hover:bg-verde-oliva-hover">Verificar</button>
         <p id="feedbackPracticaMaprayes" class="text-sm"></p>
       </div>
     </div>
     <div id="aprendizaje" class="hidden flex flex-col space-y-4">
       <div class="flex items-center justify-between">
         <h2 class="text-2xl font-semibold">Modo Aprendizaje</h2>
-        <button id="regresarDesdeAprendizaje" class="px-4 py-2 bg-gray-600 rounded hover:bg-gray-700">Regresar</button>
+        <button id="regresarDesdeAprendizaje" class="px-4 py-2 bg-azul-grisaceo rounded hover:bg-verde-oliva-hover">Regresar al Menú</button>
       </div>
-      <p class="text-sm">Completa los ejercicios para aprender Maprayés. Progreso: <span id="progresoAprendizaje">0/5</span></p>
-      <div id="ejercicioActual" class="space-y-4">
-        <h3 class="text-xl font-semibold" id="tipoEjercicio"></h3>
-        <p class="text-lg" id="textoEjercicio"></p>
-        <textarea id="respuestaEjercicio" class="w-full p-3 bg-gray-800 border border-gray-600 rounded-lg text-white" placeholder="Escribe tu respuesta..."></textarea>
-        <button id="verificarEjercicioBtn" class="px-4 py-2 bg-blue-600 rounded hover:bg-blue-700">Verificar</button>
-        <p id="feedbackEjercicio" class="text-sm"></p>
-      </div>
-    </div>
-    <div id="config" class="hidden flex flex-col space-y-4">
-      <div class="flex items-center justify-between">
-        <h2 class="text-2xl font-semibold">Configuración</h2>
-        <button id="regresarDesdeConfig" class="px-4 py-2 bg-gray-600 rounded hover:bg-gray-700">Regresar</button>
-      </div>
-      <p class="text-sm">Personaliza tu experiencia con Maprayés.</p>
-      <div>
-        <label class="flex items-center space-x-2">
-          <input type="checkbox" id="temaToggle">
-          <span>Modo Claro</span>
-        </label>
-      </div>
-      <button id="reiniciarTodoBtn" class="px-4 py-2 bg-red-600 rounded hover:bg-red-700">Reiniciar Todo</button>
-    </div>
-    <div id="ayuda" class="hidden fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
-      <div class="bg-gray-800 p-6 rounded-lg max-w-md w-full">
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="text-2xl font-semibold">Ayuda</h2>
-          <button id="cerrarAyuda" class="text-gray-400 hover:text-white">✖</button>
+      <p class="text-sm">Practica traduciendo en Maprayés. Racha: <span id="rachaAprendizaje">0</span></p>
+      <div id="modosGrid" class="grid-modos"></div>
+      <div id="modoLetras" class="hidden flex flex-col space-y-4">
+        <div class="flex items-center justify-between">
+          <h3 class="text-2xl font-semibold">📝 Letras</h3>
+          <button id="regresarDesdeLetras" class="px-4 py-2 bg-azul-grisaceo rounded hover:bg-verde-oliva-hover">Regresar</button>
         </div>
-        <p class="text-sm mb-4">Maprayés es un sistema de codificación único. Aquí tienes algunas instrucciones:</p>
-        <ul class="list-disc list-inside text-sm space-y-2">
-          <li>Usa el <strong>Traductor</strong> para convertir texto a Maprayés y viceversa.</li>
-          <li>Consulta la <strong>Tabla de Códigos</strong> para ver todos los símbolos y agregar favoritos.</li>
-          <li>Practica con la <strong>Práctica Libre</strong> o aprende con el <strong>Modo Aprendizaje</strong>.</li>
-          <li>Personaliza tu experiencia en <strong>Configuración</strong>.</li>
-          <li>Genera un código QR en el traductor para compartir tu código Maprayés.</li>
-        </ul>
+        <div id="dificultadesLetras" class="grid-dificultades"></div>
+        <div id="desafioLetras" class="space-y-4 hidden">
+          <h4 class="text-xl font-semibold" id="tipoDesafioLetras"></h4>
+          <p class="text-lg" id="textoDesafioLetras"></p>
+          <input type="text" id="respuestaDesafioLetras" class="w-full p-3 bg-azul-grisaceo border border-gris-oscuro rounded-lg text-crema-suave" placeholder="Escribe tu respuesta...">
+          <div class="flex space-x-2">
+            <button id="verificarDesafioLetrasBtn" class="px-4 py-2 bg-verde-oliva rounded hover:bg-verde-oliva-hover">Verificar</button>
+            <button id="siguienteDesafioLetrasBtn" class="px-4 py-2 bg-azul-grisaceo rounded hover:bg-verde-oliva-hover">Siguiente</button>
+          </div>
+          <p id="feedbackDesafioLetras" class="text-sm"></p>
+        </div>
+      </div>
+      <div id="modoNumeros" class="hidden flex flex-col space-y-4">
+        <div class="flex items-center justify-between">
+          <h3 class="text-2xl font-semibold">🔢 Números</h3>
+          <button id="regresarDesdeNumeros" class="px-4 py-2 bg-azul-grisaceo rounded hover:bg-verde-oliva-hover">Regresar</button>
+        </div>
+        <div id="dificultadesNumeros" class="grid-dificultades"></div>
+        <div id="desafioNumeros" class="space-y-4 hidden">
+          <h4 class="text-xl font-semibold" id="tipoDesafioNumeros"></h4>
+          <p class="text-lg" id="textoDesafioNumeros"></p>
+          <input type="text" id="respuestaDesafioNumeros" class="w-full p-3 bg-azul-grisaceo border border-gris-oscuro rounded-lg text-crema-suave" placeholder="Escribe tu respuesta...">
+          <div class="flex space-x-2">
+            <button id="verificarDesafioNumerosBtn" class="px-4 py-2 bg-verde-oliva rounded hover:bg-verde-oliva-hover">Verificar</button>
+            <button id="siguienteDesafioNumerosBtn" class="px-4 py-2 bg-azul-grisaceo rounded hover:bg-verde-oliva-hover">Siguiente</button>
+          </div>
+          <p id="feedbackDesafioNumeros" class="text-sm"></p>
+        </div>
+      </div>
+      <div id="modoSimbolos" class="hidden flex flex-col space-y-4">
+        <div class="flex items-center justify-between">
+          <h3 class="text-2xl font-semibold">❗ Símbolos</h3>
+          <button id="regresarDesdeSimbolos" class="px-4 py-2 bg-azul-grisaceo rounded hover:bg-verde-oliva-hover">Regresar</button>
+        </div>
+        <div id="dificultadesSimbolos" class="grid-dificultades"></div>
+        <div id="desafioSimbolos" class="space-y-4 hidden">
+          <h4 class="text-xl font-semibold" id="tipoDesafioSimbolos"></h4>
+          <p class="text-lg" id="textoDesafioSimbolos"></p>
+          <input type="text" id="respuestaDesafioSimbolos" class="w-full p-3 bg-azul-grisaceo border border-gris-oscuro rounded-lg text-crema-suave" placeholder="Escribe tu respuesta...">
+          <div class="flex space-x-2">
+            <button id="verificarDesafioSimbolosBtn" class="px-4 py-2 bg-verde-oliva rounded hover:bg-verde-oliva-hover">Verificar</button>
+            <button id="siguienteDesafioSimbolosBtn" class="px-4 py-2 bg-azul-grisaceo rounded hover:bg-verde-oliva-hover">Siguiente</button>
+          </div>
+          <p id="feedbackDesafioSimbolos" class="text-sm"></p>
+        </div>
+      </div>
+      <div id="modoEmojis" class="hidden flex flex-col space-y-4">
+        <div class="flex items-center justify-between">
+          <h3 class="text-2xl font-semibold">😊 Emojis</h3>
+          <button id="regresarDesdeEmojis" class="px-4 py-2 bg-azul-grisaceo rounded hover:bg-verde-oliva-hover">Regresar</button>
+        </div>
+        <div id="dificultadesEmojis" class="grid-dificultades"></div>
+        <div id="desafioEmojis" class="space-y-4 hidden">
+          <h4 class="text-xl font-semibold" id="tipoDesafioEmojis"></h4>
+          <p class="text-lg" id="textoDesafioEmojis"></p>
+          <input type="text" id="respuestaDesafioEmojis" class="w-full p-3 bg-azul-grisaceo border border-gris-oscuro rounded-lg text-crema-suave" placeholder="Escribe tu respuesta...">
+          <div class="flex space-x-2">
+            <button id="verificarDesafioEmojisBtn" class="px-4 py-2 bg-verde-oliva rounded hover:bg-verde-oliva-hover">Verificar</button>
+            <button id="siguienteDesafioEmojisBtn" class="px-4 py-2 bg-azul-grisaceo rounded hover:bg-verde-oliva-hover">Siguiente</button>
+          </div>
+          <p id="feedbackDesafioEmojis" class="text-sm"></p>
+        </div>
+      </div>
+      <div id="modoPalabras" class="hidden flex flex-col space-y-4">
+        <div class="flex items-center justify-between">
+          <h3 class="text-2xl font-semibold">📜 Palabras</h3>
+          <button id="regresarDesdePalabras" class="px-4 py-2 bg-azul-grisaceo rounded hover:bg-verde-oliva-hover">Regresar</button>
+        </div>
+        <div id="dificultadesPalabras" class="grid-dificultades"></div>
+        <div id="desafioPalabras" class="space-y-4 hidden">
+          <h4 class="text-xl font-semibold" id="tipoDesafioPalabras"></h4>
+          <p class="text-lg" id="textoDesafioPalabras"></p>
+          <input type="text" id="respuestaDesafioPalabras" class="w-full p-3 bg-azul-grisaceo border border-gris-oscuro rounded-lg text-crema-suave" placeholder="Escribe tu respuesta...">
+          <div class="flex space-x-2">
+            <button id="verificarDesafioPalabrasBtn" class="px-4 py-2 bg-verde-oliva rounded hover:bg-verde-oliva-hover">Verificar</button>
+            <button id="siguienteDesafioPalabrasBtn" class="px-4 py-2 bg-azul-grisaceo rounded hover:bg-verde-oliva-hover">Siguiente</button>
+          </div>
+          <p id="feedbackDesafioPalabras" class="text-sm"></p>
+        </div>
+      </div>
+      <div id="modoFrases" class="hidden flex flex-col space-y-4">
+        <div class="flex items-center justify-between">
+          <h3 class="text-2xl font-semibold">💬 Frases</h3>
+          <button id="regresarDesdeFrases" class="px-4 py-2 bg-azul-grisaceo rounded hover:bg-verde-oliva-hover">Regresar</button>
+        </div>
+        <div id="dificultadesFrases" class="grid-dificultades"></div>
+        <div id="desafioFrases" class="space-y-4 hidden">
+          <h4 class="text-xl font-semibold" id="tipoDesafioFrases"></h4>
+          <p class="text-lg" id="textoDesafioFrases"></p>
+          <input type="text" id="respuestaDesafioFrases" class="w-full p-3 bg-azul-grisaceo border border-gris-oscuro rounded-lg text-crema-suave" placeholder="Escribe tu respuesta...">
+          <div class="flex space-x-2">
+            <button id="verificarDesafioFrasesBtn" class="px-4 py-2 bg-verde-oliva rounded hover:bg-verde-oliva-hover">Verificar</button>
+            <button id="siguienteDesafioFrasesBtn" class="px-4 py-2 bg-azul-grisaceo rounded hover:bg-verde-oliva-hover">Siguiente</button>
+          </div>
+          <p id="feedbackDesafioFrases" class="text-sm"></p>
+        </div>
       </div>
     </div>
-  </div>
-  <footer class="mt-8 py-4 text-center text-gray-400">
-    <p>Maprayés © 2025 | Creado por Joke-Fu</p>
-    <p><a href="https://github.com/Joke-Fu/maprayes" target="_blank" class="underline hover:text-white">Ver en GitHub</a></p>
-  </footer>
-  <script>
-    // Diccionario completo de Maprayés
-    const alfabeto = {
-      '(1)1':'A','(1)01':'Á','(1)2':'B','(1)3':'C','(1)4':'D','(1)5':'E','(1)05':'É','(1)6':'F','(1)7':'G','(1)8':'H','(1)9':'I','(1)09':'Í',
-      '(2)1':'J','(2)2':'K','(2)3':'L','(2)4':'M','(2)5':'N','(2)6':'Ñ','(2)7':'O','(2)07':'Ó','(2)8':'P','(2)9':'Q','(3)1':'R','(3)2':'S',
-      '(3)3':'T','(3)4':'U','(3)04':'Ú','(3)5':'V','(3)6':'W','(3)7':'X','(3)8':'Y','(3)9':'Z','(4)1':'?','(4)01':'¿','(4)2':'!','(4)02':'¡',
-      '(4)3':'=','(4)4':',','(4)5':';','(4)6':'"','(4)7':')','(4)07':'(','(4)8':'...','(4)9':'*','(5)1':'+','(5)2':'-','(5)3':'÷','(5)4':'×',
-      '(5)5':'√','(5)6':'_','(5)7':'@','(5)8':'π','(5)9':'$','(6)1':'#','(6)2':"'",'(6)3':'%','(6)4':'^','(6)5':'°','(6)6':'/','(6)06':'\\',
-      '(6)7':'>','(6)07':'<','(6)8':'¢','(6)9':'€','(1)3(1)5#':'0','(3)4(2)5#':'1','(1)4(2)7#':'2','(3)3(3)1#':'3','(1)3(3)4#':'4',
-      '(1)3(1)9#':'5','(3)2(1)5#':'6','(3)2(1)9#':'7','(2)7(1)3#':'8','(2)5(3)4#':'9','(0)0':'.','(7)1':'🙂','(7)2':'🙁','(7)3':'😡',
-      '(7)4':'😦','(7)5':'😂','(7)6':'😭','(7)7':'🐱','(7)8':'👍🏼','(7)9':'👎🏼','(8)1':'❤️','(8)2':'😐','(8)3':'😎','(8)4':'🤔','(8)5':'😊',
-      '(8)6':'🧐','(8)7':'😴','(8)8':'🦕','(8)9':'🥳', '||': ' '
-    };
-    const textoAMaprayes = Object.entries(alfabeto).reduce((acc, [clave, valor]) => { acc[valor] = clave; return acc; }, {});
-    
-    // Estado inicial
-    let categoriaActual = 'letras';
-    let favoritos = JSON.parse(localStorage.getItem('favoritos') || '[]');
-    let modoPractica = 'texto';
-    let config = { tema: localStorage.getItem('tema') || 'oscuro' };
-    let aprendizajeProgreso = parseInt(localStorage.getItem('aprendizajeProgreso') || '0');
-    const ejercicios = [
-      { tipo: 'texto', texto: 'Hola', esperado: '(1)8(2)7(2)3(1)1' },
-      { tipo: 'maprayes', texto: '(1)5(1)2(2)7', esperado: 'EBO' },
-      { tipo: 'texto', texto: '😊 123', esperado: '(8)5||(3)4(2)5#(1)4(2)7#(3)3(3)1#' },
-      { tipo: 'maprayes', texto: '(2)5(2)7||(7)1', esperado: 'NO 🙂' },
-      { tipo: 'texto', texto: 'ABC!', esperado: '(1)1(1)2(1)3(4)2' }
-    ];
-
-    // Mostrar notificación
-    function mostrarNotificacion(mensaje, color = 'green') {
-      const contenedor = document.getElementById('notificaciones');
-      const notif = document.createElement('div');
-      notif.className = `notificacion bg-${color}-600`;
-      notif.textContent = mensaje;
-      contenedor.appendChild(notif);
-      setTimeout(() => notif.remove(), 3000);
-    }
-
-    // Mostrar secciones
-    function mostrarSeccion(seccion) {
-      document.getElementById('pantallaPrincipal').classList.add('hidden');
-      document.getElementById('traductor').classList.add('hidden');
-      document.getElementById('tablaCodigos').classList.add('hidden');
-      document.getElementById('practica').classList.add('hidden');
-      document.getElementById('aprendizaje').classList.add('hidden');
-      document.getElementById('config').classList.add('hidden');
-      document.getElementById('ayuda').classList.add('hidden');
-      document.getElementById(seccion).classList.remove('hidden');
-      if (seccion === 'tablaCodigos') mostrarTabla();
-      if (seccion === 'aprendizaje') cargarEjercicio();
-    }
-
-    // Traductor: Texto a Maprayés
-    function traducirAMaprayes() {
-      let texto = document.getElementById('inputText').value;
-      let resultado = [];
-      let caracteresInvalidos = false;
-      for (let palabra of texto.split(/(?=\s)/)) {
-        let codificada = '';
-        for (let char of palabra) {
-          if (textoAMaprayes[char.toUpperCase()] || char === ' ') {
-            codificada += char === ' ' ? '||' : textoAMaprayes[char.toUpperCase()];
-          } else {
-            codificada += '?';
-            caracteresInvalidos = true;
-          }
-        }
-        resultado.push(codificada);
-      }
-      document.getElementById('maprayesOutput').value = resultado.join('');
-      if (caracteresInvalidos) mostrarNotificacion('Algunos caracteres no soportados', 'yellow');
-    }
-
-    // Traductor: Maprayés a Texto
-    function traducirATexto() {
-      let entrada = document.getElementById('inputMaprayes').value.replace(/\s/g, '');
-      let partes = entrada.includes('||') ? entrada.split('||') : [entrada];
-      let resultado = [];
-      let error = false;
-      for (let parte of partes) {
-        let palabra = '';
-        let i = 0;
-        while (i < parte.length) {
-          let match = null;
-          for (let len = 9; len >= 1; len--) {
-            let sub = parte.slice(i, i + len);
-            if (alfabeto[sub]) { match = sub; break; }
-          }
-          if (match) {
-            palabra += alfabeto[match];
-            i += match.length;
-          } else {
-            palabra += '?';
-            i++;
-            error = true;
-          }
-        }
-        resultado.push(palabra);
-      }
-      document.getElementById('textoOutput').value = resultado.join(' ').trim();
-      if (error) mostrarNotificacion('Código inválido detectado', 'yellow');
-    }
-
-    // Funciones de copiar e intercambiar
-    function copiarTexto(elementId) {
-      const texto = document.getElementById(elementId).value;
-      navigator.clipboard.writeText(texto).then(() => {
-        mostrarNotificacion('Texto copiado al portapapeles', 'green');
-      }).catch(() => {
-        mostrarNotificacion('Error al copiar', 'red');
-      });
-    }
-
-    function intercambiarTextos(inputId, outputId) {
-      const input = document.getElementById(inputId);
-      const output = document.getElementById(outputId);
-      const temp = input.value;
-      input.value = output.value;
-      output.value = temp;
-      if (inputId === 'inputText') {
-        traducirAMaprayes();
-      } else {
-        traducirATexto();
-      }
-    }
-
-    // Generar QR
-    function generarQR() {
-      const texto = document.getElementById('maprayesOutput').value;
-      if (!texto) {
-        mostrarNotificacion('No hay código Maprayés para generar QR', 'yellow');
-        return;
-      }
-      const qrCanvas = document.getElementById('qrCanvas');
-      qrCanvas.innerHTML = '';
-      qrCanvas.classList.remove('hidden');
-      QRCode.toCanvas(texto, { width: 200 }, function (error, canvas) {
-        if (error) {
-          mostrarNotificacion('Error al generar QR', 'red');
-          return;
-        }
-        qrCanvas.appendChild(canvas);
-        mostrarNotificacion('Código QR generado', 'green');
-      });
-    }
-
-    // Tabla de códigos
-    function toggleFavorito(codigo) {
-      if (favoritos.includes(codigo)) {
-        favoritos = favoritos.filter(f => f !== codigo);
-      } else {
-        favoritos.push(codigo);
-      }
-      localStorage.setItem('favoritos', JSON.stringify(favoritos));
-      mostrarTabla();
-    }
-
-    function mostrarTabla() {
-      const filtro = document.getElementById('filtroTabla').value.toLowerCase();
-      let items = [];
-      if (categoriaActual === 'letras') {
-        items = Object.entries(alfabeto).filter(([_, char]) => /^[A-ZÁÉÍÓÚÑ]$/.test(char));
-      } else if (categoriaActual === 'numeros') {
-        items = Object.entries(alfabeto).filter(([_, char]) => /^[0-9]$/.test(char));
-      } else if (categoriaActual === 'simbolos') {
-        items = Object.entries(alfabeto).filter(([_, char]) => !/^[A-ZÁÉÍÓÚÑ0-9]$/.test(char) && !['🙂','🙁','😡','😦','😂','😭','🐱','👍🏼','👎🏼','❤️','😐','😎','🤔','😊','🧐','😴','🦕','🥳'].includes(char));
-      } else if (categoriaActual === 'emojis') {
-        items = Object.entries(alfabeto).filter(([_, char]) => ['🙂','🙁','😡','😦','😂','😭','🐱','👍🏼','👎🏼','❤️','😐','😎','🤔','😊','🧐','😴','🦕','🥳'].includes(char));
-      } else if (categoriaActual === 'favoritos') {
-        items = Object.entries(alfabeto).filter(([codigo]) => favoritos.includes(codigo));
-      }
-      const cuerpo = document.getElementById('tablaCuerpo');
-      cuerpo.innerHTML = items
-        .filter(([codigo, char]) => char.toString().toLowerCase().includes(filtro) || codigo.toLowerCase().includes(filtro))
-        .map(([codigo, char]) => `<tr class="border-b border-gray-600"><td class="p-2">${char}</td><td class="p-2">${codigo}</td><td class="p-2"><span class="estrella ${favoritos.includes(codigo) ? 'favorito' : ''}" data-codigo="${codigo}">🌟</span></td></tr>`)
-        .join('');
-      
-      const estrellas = document.querySelectorAll('.estrella');
-      estrellas.forEach(estrella => {
-        estrella.onclick = function() {
-          const codigo = this.getAttribute('data-codigo');
-          toggleFavorito(codigo);
-        };
-      });
-    }
-
-    // Práctica libre
-    function cambiarModoPractica(nuevoModo) {
-      modoPractica = nuevoModo;
-      document.getElementById('practicaTexto').classList.toggle('hidden', nuevoModo !== 'texto');
-      document.getElementById('practicaMaprayes').classList.toggle('hidden', nuevoModo === 'texto');
-      document.getElementById('practicaTextoBtn').classList.toggle('bg-blue-800', nuevoModo === 'texto');
-      document.getElementById('practicaMaprayesBtn').classList.toggle('bg-blue-800', nuevoModo !== 'texto');
-    }
-
-    function verificarPracticaTexto() {
-      const texto = document.getElementById('practicaInputTexto').value;
-      const esperado = document.getElementById('practicaEsperadoTexto').value.trim();
-      let codificado = [];
-      for (let palabra of texto.split(/(?=\s)/)) {
-        let cod = '';
-        for (let char of palabra) {
-          if (textoAMaprayes[char.toUpperCase()] || char === ' ') {
-            cod += char === ' ' ? '||' : textoAMaprayes[char.toUpperCase()];
-          } else {
-            cod += '?';
-          }
-        }
-        codificado.push(cod);
-      }
-      const resultado = codificado.join('');
-      const feedback = document.getElementById('feedbackPracticaTexto');
-      if (resultado === esperado) {
-        feedback.textContent = '¡Correcto!';
-        feedback.className = 'text-green-500 text-sm';
-      } else {
-        feedback.textContent = `Incorrecto. Debería ser: ${resultado}`;
-        feedback.className = 'text-red-500 text-sm';
-      }
-    }
-
-    function verificarPracticaMaprayes() {
-      const maprayes = document.getElementById('practicaInputMaprayes').value.replace(/\s/g, '');
-      const esperado = document.getElementById('practicaEsperadoMaprayes').value.trim();
-      let resultado = [];
-      let partes = maprayes.includes('||') ? maprayes.split('||') : [maprayes];
-      for (let parte of partes) {
-        let palabra = '';
-        let i = 0;
-        while (i < parte.length) {
-          let match = null;
-          for (let len = 9; len >= 1; len--) {
-            let sub = parte.slice(i, i + len);
-            if (alfabeto[sub]) { match = sub; break; }
-          }
-          if (match) {
-            palabra += alfabeto[match];
-            i += match.length;
-          } else {
-            palabra += '?';
-            i++;
-          }
-        }
-        resultado.push(palabra);
-      }
-      const texto = resultado.join(' ').trim();
-      const feedback = document.getElementById('feedbackPracticaMaprayes');
-      if (texto === esperado) {
-        feedback.textContent = '¡Correcto!';
-        feedback.className = 'text-green-500 text-sm';
-      } else {
-        feedback.textContent = `Incorrecto. Debería ser: ${texto}`;
-        feedback.className = 'text-red-500 text-sm';
-      }
-    }
-
-    // Modo aprendizaje
-    function cargarEjercicio() {
-      if (aprendizajeProgreso >= ejercicios.length) {
-        document.getElementById('ejercicioActual').innerHTML = '<p class="text-lg">¡Has completado todos los ejercicios! 🎉</p>';
-        return;
-      }
-      const ejercicio = ejercicios[aprendizajeProgreso];
-      document.getElementById('progresoAprendizaje').textContent = `${aprendizajeProgreso + 1}/${ejercicios.length}`;
-      document.getElementById('tipoEjercicio').textContent = ejercicio.tipo === 'texto' ? 'Texto a Maprayés' : 'Maprayés a Texto';
-      document.getElementById('textoEjercicio').textContent = ejercicio.texto;
-      document.getElementById('respuestaEjercicio').value = '';
-      document.getElementById('feedbackEjercicio').textContent = '';
-    }
-
-    function verificarEjercicio() {
-      const ejercicio = ejercicios[aprendizajeProgreso];
-      const respuesta = document.getElementById('respuestaEjercicio').value.trim();
-      const feedback = document.getElementById('feedbackEjercicio');
-      if (respuesta === ejercicio.esperado) {
-        feedback.textContent = '¡Correcto! 🎉';
-        feedback.className = 'text-green-500 text-sm';
-        aprendizajeProgreso++;
-        localStorage.setItem('aprendizajeProgreso', aprendizajeProgreso);
-        setTimeout(() => cargarEjercicio(), 1000);
-      } else {
-        feedback.textContent = `Incorrecto. Debería ser: ${ejercicio.esperado}`;
-        feedback.className = 'text-red-500 text-sm';
-      }
-    }
-
-    // Configuración
-    function aplicarTema() {
-      const tema = config.tema;
-      document.getElementById('theme').className = tema === 'claro' ? 'bg-gray-100 text-black min-h-screen p-6 flex flex-col' : 'bg-gray-900 text-white min-h-screen p-6 flex flex-col';
-      document.getElementById('temaToggle').checked = tema === 'claro';
-    }
-
-    function cambiarTema() {
-      config.tema = config.tema === 'oscuro' ? 'claro' : 'oscuro';
-      localStorage.setItem('tema', config.tema);
-      aplicarTema();
-    }
-
-    function reiniciarTodo() {
-      localStorage.clear();
-      config.tema = 'oscuro';
-      aprendizajeProgreso = 0;
-      localStorage.setItem('tema', config.tema);
-      localStorage.setItem('aprendizajeProgreso', aprendizajeProgreso);
-      favoritos = [];
-      localStorage.setItem('favoritos', JSON.stringify(favoritos));
-      aplicarTema();
-      mostrarNotificacion('Todo el progreso ha sido reiniciado', 'red');
-    }
-
-    // Event listeners
-    document.getElementById('btnTraductor').onclick = function() { mostrarSeccion('traductor'); };
-    document.getElementById('btnTabla').onclick = function() { mostrarSeccion('tablaCodigos'); };
-    document.getElementById('btnPractica').onclick = function() { mostrarSeccion('practica'); };
-    document.getElementById('btnAprendizaje').onclick = function() { mostrarSeccion('aprendizaje'); };
-    document.getElementById('btnConfig').onclick = function() { mostrarSeccion('config'); };
-    document.getElementById('btnAyuda').onclick = function() { mostrarSeccion('ayuda'); };
-    document.getElementById('regresarDesdeTraductor').onclick = function() { mostrarSeccion('pantallaPrincipal'); };
-    document.getElementById('regresarDesdeTabla').onclick = function() { mostrarSeccion('pantallaPrincipal'); };
-    document.getElementById('regresarDesdePractica').onclick = function() { mostrarSeccion('pantallaPrincipal'); };
-    document.getElementById('regresarDesdeAprendizaje').onclick = function() { mostrarSeccion('pantallaPrincipal'); };
-    document.getElementById('regresarDesdeConfig').onclick = function() { mostrarSeccion('pantallaPrincipal'); };
-    document.getElementById('cerrarAyuda').onclick = function() { mostrarSeccion('pantallaPrincipal'); };
-    document.getElementById('inputText').oninput = traducirAMaprayes;
-    document.getElementById('inputMaprayes').oninput = traducirATexto;
-    document.getElementById('copiarInputTextBtn').onclick = function() { copiarTexto('inputText'); };
-    document.getElementById('copiarMaprayesBtn').onclick = function() { copiarTexto('maprayesOutput'); };
-    document.getElementById('copiarInputMaprayesBtn').onclick = function() { copiarTexto('inputMaprayes'); };
-    document.getElementById('copiarTextoOutputBtn').onclick = function() { copiarTexto('textoOutput'); };
-    document.getElementById('intercambiarTextBtn').onclick = function() { intercambiarTextos('inputText', 'maprayesOutput'); };
-    document.getElementById('intercambiarMaprayesBtn').onclick = function() { intercambiarTextos('inputMaprayes', 'textoOutput'); };
-    document.getElementById('generarQRBtn').onclick = generarQR;
-    document.getElementById('tablaLetrasBtn').onclick = function() { categoriaActual = 'letras'; mostrarTabla(); };
-    document.getElementById('tablaNumerosBtn').onclick = function() { categoriaActual = 'numeros'; mostrarTabla(); };
-    document.getElementById('tablaSimbolosBtn').onclick = function() { categoriaActual = 'simbolos'; mostrarTabla(); };
-    document.getElementById('tablaEmojisBtn').onclick = function() { categoriaActual = 'emojis'; mostrarTabla(); };
-    document.getElementById('tablaFavoritosBtn').onclick = function() { categoriaActual = 'favoritos'; mostrarTabla(); };
-    document.getElementById('filtroTabla').oninput = mostrarTabla;
-    document.getElementById('practicaTextoBtn').onclick = function() { cambiarModoPractica('texto'); };
-    document.getElementById('practicaMaprayesBtn').onclick = function() { cambiarModoPractica('maprayes'); };
-    document.getElementById('verificarPracticaTextoBtn').onclick = verificarPracticaTexto;
-    document.getElementById('verificarPracticaMaprayesBtn').onclick = verificarPracticaMaprayes;
-    document.getElementById('verificarEjercicioBtn').onclick = verificarEjercicio;
-    document.getElementById('temaToggle').onchange = cambiarTema;
-    document.getElementById('reiniciarTodoBtn').onclick = reiniciarTodo;
-
-    // Inicializar
-    aplicarTema();
-    mostrarSeccion('pantallaPrincipal');
-  </script>
-</body>
-</html>
+    <div id="vitrina" class="hidden fl
